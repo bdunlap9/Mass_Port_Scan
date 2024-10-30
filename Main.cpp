@@ -86,24 +86,28 @@ std::set<int> parsePorts(const std::string& portInput) {
     return ports;
 }
 
-void scanAllIPs(const std::set<int>& ports, int timeout_sec) {
-    for (uint32_t i = 0; i <= 0xFFFFFFFF; ++i) {
-        struct in_addr addr;
-        addr.s_addr = htonl(i);
-        std::string ip = inet_ntoa(addr);
-        
-        // Scan the current IP for the specified ports
-        scanIP(ip, ports, timeout_sec);
+void scanBatchIPs(const std::set<int>& ports, int timeout_sec, int batchSize) {
+    for (uint32_t i = 0; i <= 0xFFFFFFFF; i += batchSize) {
+        std::vector<std::future<void>> futures;
+
+        for (int j = 0; j < batchSize && (i + j) <= 0xFFFFFFFF; ++j) {
+            struct in_addr addr;
+            addr.s_addr = htonl(i + j);
+            std::string ip = inet_ntoa(addr);
+            futures.emplace_back(std::async(std::launch::async, scanIP, ip, ports, timeout_sec));
+        }
+
+        for (auto& fut : futures) fut.get(); // Wait for all futures in the current batch to complete
     }
 }
 
 void printUsage(const std::string& programName) {
-    std::cerr << "Usage: " << programName << " <IP_ADDRESS|ALL> <PORTS> <TIMEOUT_IN_SECONDS>" << std::endl;
+    std::cerr << "Usage: " << programName << " <IP_ADDRESS|ALL> <PORTS> <TIMEOUT_IN_SECONDS> [BATCH_SIZE]" << std::endl;
     std::cerr << "PORTS can be a single port (80), a range (1-1024), or a comma-separated list (22,80,443)." << std::endl;
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 4) {
+    if (argc < 4 || argc > 5) {
         printUsage(argv[0]);
         return 1;
     }
@@ -111,6 +115,7 @@ int main(int argc, char* argv[]) {
     std::string ip = argv[1];
     std::string portInput = argv[2];
     int timeout_sec = std::stoi(argv[3]);
+    int batchSize = (argc == 5) ? std::stoi(argv[4]) : 100; // Default batch size if not provided
 
     std::set<int> ports = parsePorts(portInput);
     if (ports.empty()) {
@@ -121,7 +126,7 @@ int main(int argc, char* argv[]) {
     auto start = std::chrono::high_resolution_clock::now();
     
     if (ip == "ALL") {
-        scanAllIPs(ports, timeout_sec);
+        scanBatchIPs(ports, timeout_sec, batchSize);
     } else {
         scanIP(ip, ports, timeout_sec);
     }
