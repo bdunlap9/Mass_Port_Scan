@@ -51,13 +51,13 @@ void scanIP(const std::string& ip, const std::set<int>& ports, int timeout_sec) 
 
     for (int port : ports) {
         if (futures.size() >= MAX_FUTURES) {
-            for (auto& fut : futures) fut.get(); // Wait for all futures to complete
+            for (auto& fut : futures) fut.get();
             futures.clear();
         }
         futures.emplace_back(std::async(std::launch::async, scanPort, ip, port, timeout_sec));
     }
 
-    for (auto& fut : futures) fut.get(); // Wait for remaining futures
+    for (auto& fut : futures) fut.get();
 }
 
 std::set<int> parsePorts(const std::string& portInput) {
@@ -97,7 +97,7 @@ void scanBatchIPs(const std::set<int>& ports, int timeout_sec, int batchSize) {
             futures.emplace_back(std::async(std::launch::async, scanIP, ip, ports, timeout_sec));
         }
 
-        for (auto& fut : futures) fut.get(); // Wait for all futures in the current batch to complete
+        for (auto& fut : futures) fut.get();
     }
 }
 
@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
     std::string ip = argv[1];
     std::string portInput = argv[2];
     int timeout_sec = std::stoi(argv[3]);
-    int batchSize = (argc == 5) ? std::stoi(argv[4]) : 100; // Default batch size if not provided
+    int batchSize = (argc == 5) ? std::stoi(argv[4]) : 100;
 
     std::set<int> ports = parsePorts(portInput);
     if (ports.empty()) {
