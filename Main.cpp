@@ -1,5 +1,5 @@
 #include <iostream>
-#include <thread>
+#include <future>
 #include <vector>
 #include <cstring>
 #include <chrono>
@@ -10,7 +10,7 @@
 #include <sstream>
 #include <set>
 
-const int MAX_THREADS = 100;
+const int MAX_FUTURES = 100;
 
 void scanPort(const std::string& ip, int port, int timeout_sec) {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -47,17 +47,17 @@ void scanPort(const std::string& ip, int port, int timeout_sec) {
 }
 
 void scanIP(const std::string& ip, const std::set<int>& ports, int timeout_sec) {
-    std::vector<std::thread> threads;
+    std::vector<std::future<void>> futures;
 
     for (int port : ports) {
-        if (threads.size() >= MAX_THREADS) {
-            for (auto& th : threads) th.join();
-            threads.clear();
+        if (futures.size() >= MAX_FUTURES) {
+            for (auto& fut : futures) fut.get(); // Wait for all futures to complete
+            futures.clear();
         }
-        threads.emplace_back(scanPort, ip, port, timeout_sec);
+        futures.emplace_back(std::async(std::launch::async, scanPort, ip, port, timeout_sec));
     }
 
-    for (auto& th : threads) th.join();
+    for (auto& fut : futures) fut.get(); // Wait for remaining futures
 }
 
 std::set<int> parsePorts(const std::string& portInput) {
@@ -86,10 +86,25 @@ std::set<int> parsePorts(const std::string& portInput) {
     return ports;
 }
 
+void scanAllIPs(const std::set<int>& ports, int timeout_sec) {
+    for (uint32_t i = 0; i <= 0xFFFFFFFF; ++i) {
+        struct in_addr addr;
+        addr.s_addr = htonl(i);
+        std::string ip = inet_ntoa(addr);
+        
+        // Scan the current IP for the specified ports
+        scanIP(ip, ports, timeout_sec);
+    }
+}
+
+void printUsage(const std::string& programName) {
+    std::cerr << "Usage: " << programName << " <IP_ADDRESS|ALL> <PORTS> <TIMEOUT_IN_SECONDS>" << std::endl;
+    std::cerr << "PORTS can be a single port (80), a range (1-1024), or a comma-separated list (22,80,443)." << std::endl;
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 4) {
-        std::cerr << "Usage: " << argv[0] << " <IP_ADDRESS> <PORTS> <TIMEOUT_IN_SECONDS>" << std::endl;
-        std::cerr << "PORTS can be a single port (80), a range (1-1024), or a comma-separated list (22,80,443)." << std::endl;
+        printUsage(argv[0]);
         return 1;
     }
 
@@ -105,7 +120,11 @@ int main(int argc, char* argv[]) {
 
     auto start = std::chrono::high_resolution_clock::now();
     
-    scanIP(ip, ports, timeout_sec);
+    if (ip == "ALL") {
+        scanAllIPs(ports, timeout_sec);
+    } else {
+        scanIP(ip, ports, timeout_sec);
+    }
     
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = end - start;
